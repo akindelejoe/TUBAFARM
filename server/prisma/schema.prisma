@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  ADMIN
+  MANAGER
+  FARM_WORKER
+  SALES
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum TreeStatus {
+  ACTIVE
+  INACTIVE
+  DISEASED
+  REMOVED
+}
+
+enum Quality {
+  EXCELLENT
+  GOOD
+  AVERAGE
+  POOR
+}
+
+enum ProductStatus {
+  ACTIVE
+  DISCONTINUED
+}
+
+enum InventoryTransactionType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+  SALE
+}
+
+enum CustomerType {
+  INDIVIDUAL
+  RETAILER
+  WHOLESALER
+  DISTRIBUTOR
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  MOBILE_PAYMENT
+  OTHER
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  UNPAID
+}
+
+enum ExpenseCategory {
+  LABOR
+  EQUIPMENT
+  TRANSPORTATION
+  FARM_SUPPLIES
+  MAINTENANCE
+  UTILITIES
+  OTHER
+}
+
+// ---------- Models ----------
+
+model User {
+  id           String   @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tappingRecords       TappingRecord[]
+  soldSales            Sale[]                @relation("SaleSoldBy")
+  createdExpenses       Expense[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("users")
+}
+
+model Farm {
+  id          String   @id @default(uuid())
+  name        String
+  location    String
+  areaSize    Float?
+  description String?
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  trees Tree[]
+
+  @@map("farms")
+}
+
+model Tree {
+  id           String     @id @default(uuid())
+  farmId       String
+  treeCode     String     @unique
+  species      String
+  variety      String?
+  plantingDate DateTime
+  status       TreeStatus @default(ACTIVE)
+  notes        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  farm           Farm            @relation(fields: [farmId], references: [id], onDelete: Restrict)
+  tappingRecords TappingRecord[]
+
+  @@index([farmId])
+  @@map("trees")
+}
+
+model TappingRecord {
+  id               String   @id @default(uuid())
+  treeId           String
+  recordedByUserId String
+  tapDate          DateTime
+  quantityLiters   Float
+  quality          Quality
+  remarks          String?
+  createdAt        DateTime @default(now())
+
+  tree       Tree @relation(fields: [treeId], references: [id], onDelete: Restrict)
+  recordedBy User @relation(fields: [recordedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([treeId])
+  @@index([tapDate])
+  @@map("tapping_records")
+}
+
+model Product {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  category     String
+  unit         String
+  sellingPrice Decimal       @db.Decimal(12, 2)
+  status       ProductStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  inventory             Inventory?
+  saleItems             SaleItem[]
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("products")
+}
+
+model Inventory {
+  id                 String   @id @default(uuid())
+  productId          String   @unique
+  quantityAvailable  Float    @default(0)
+  reorderLevel       Float    @default(0)
+  lastUpdated        DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("inventory")
+}
+
+model InventoryTransaction {
+  id              String                    @id @default(uuid())
+  productId       String
+  type            InventoryTransactionType
+  quantity        Float
+  reference       String?
+  notes           String?
+  createdAt       DateTime                  @default(now())
+  createdByUserId String
+
+  product       Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  createdByUser User    @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+  @@map("inventory_transactions")
+}
+
+model Customer {
+  id           String       @id @default(uuid())
+  name         String
+  phone        String?
+  email        String?
+  address      String?
+  customerType CustomerType @default(INDIVIDUAL)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  sales Sale[]
+
+  @@map("customers")
+}
+
+model Sale {
+  id            String        @id @default(uuid())
+  customerId    String
+  soldByUserId  String
+  saleDate      DateTime      @default(now())
+  subtotal      Decimal       @db.Decimal(12, 2)
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod
+  paymentStatus PaymentStatus @default(UNPAID)
+  notes         String?
+  createdAt     DateTime      @default(now())
+
+  customer  Customer   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  soldBy    User       @relation("SaleSoldBy", fields: [soldByUserId], references: [id], onDelete: Restrict)
+  saleItems SaleItem[]
+
+  @@index([customerId])
+  @@index([saleDate])
+  @@map("sales")
+}
+
+model SaleItem {
+  id         String  @id @default(uuid())
+  saleId     String
+  productId  String
+  quantity   Float
+  unitPrice  Decimal @db.Decimal(12, 2)
+  lineTotal  Decimal @db.Decimal(12, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@map("sale_items")
+}
+
+model Supplier {
+  id         String   @id @default(uuid())
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  notes      String?
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  expenses Expense[]
+
+  @@map("suppliers")
+}
+
+model Expense {
+  id              String          @id @default(uuid())
+  category        ExpenseCategory
+  description     String
+  amount          Decimal         @db.Decimal(12, 2)
+  expenseDate     DateTime
+  supplierId      String?
+  createdByUserId String
+  createdAt       DateTime        @default(now())
+
+  supplier      Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  createdByUser User      @relation(fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  @@index([expenseDate])
+  @@map("expenses")
+}

@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tuba
+      POSTGRES_PASSWORD: tuba
+      POSTGRES_DB: tuba_farm
+    ports:
+      - "5432:5432"
+    volumes:
+      - tuba_pgdata:/var/lib/postgresql/data
+
+  server:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://tuba:tuba@postgres:5432/tuba_farm?schema=public
+      JWT_SECRET: change-me-in-production
+      PORT: 4000
+    ports:
+      - "4000:4000"
+
+  client:
+    build: ./client
+    restart: unless-stopped
+    depends_on:
+      - server
+    environment:
+      VITE_API_URL: http://localhost:4000/api
+    ports:
+      - "5173:5173"
+
+volumes:
+  tuba_pgdata:
